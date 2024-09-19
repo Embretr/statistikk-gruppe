@@ -23,7 +23,7 @@ print(f"R-squared: {r_value**2:.2f}")
 
 # Step 4: Plot the data points and the regression line
 plt.scatter(X, Y, color='blue', label='Data')  # Scatter plot of the data
-plt.plot(X, intercept + slope * X, color='red',
+plt.plot(X, intercept + slope * X.astype(float), color='red',
          label='Regresjonslinje')  # Plot the regression line
 plt.xlabel('Skostørrelse')
 plt.ylabel('Høyde (cm)')
