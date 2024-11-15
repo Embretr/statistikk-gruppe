@@ -16,7 +16,12 @@ df = pd.read_csv("Data/lego.population.csv", sep=",", encoding="windows-1252")
 print("\nDistinct Themes: ", df['Theme'].unique())
 
 # Clean and prepare data
+
+
 def clean_data(df):
+    df = df[["Theme", "Price", "Pieces", "Pages"]]
+    df = df.dropna()
+
     # Clean theme names
     df['Theme'] = df['Theme'].astype(str)
     df['Theme'] = df['Theme'].str.replace(r'[^a-zA-Z0-9\s-]', '', regex=True)
@@ -24,9 +29,6 @@ def clean_data(df):
     # Clean price data
     df['Price'] = df['Price'].str.replace(r'[$]', '', regex=True)
     df['Price'] = df['Price'].astype(float)
-
-    # Clean age data
-    df['Ages'] = df['Ages'].str.extract('(\d+)').astype(float)
 
     # Updated licensed themes list
     licensed_themes = [
@@ -51,20 +53,24 @@ def clean_data(df):
     ]
 
     # Create licensed flag
-    df['is_licensed'] = df['Theme'].apply(lambda x: 1 if any(theme.lower() in x.lower() for theme in licensed_themes) else 0)
+    df['Is_licensed'] = df['Theme'].apply(lambda x: 1 if any(
+        theme.lower() in x.lower() for theme in licensed_themes) else 0)
+
+    df = df[["Price", "Is_licensed", "Pieces", "Pages"]]
 
     return df
+
 
 # Clean the data
 df = clean_data(df)
 
 # Remove missing values for model variables
-model_vars = ['Price', 'is_licensed', 'Pieces', 'Year', 'Ages', 'Minifigures']
-df_clean = df.dropna(subset=model_vars)
+model_vars = ["Price", "Is_licensed",
+              "Pieces", "Pages"]
 
 # Create correlation matrix
 plt.figure(figsize=(10, 8))
-numeric_df: DataFrame = df_clean[model_vars].select_dtypes(include=[np.number])
+numeric_df: DataFrame = df[model_vars].select_dtypes(include=[np.number])
 correlation_matrix = numeric_df.corr()
 sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', center=0)
 plt.title('Correlation Matrix of Variables')
@@ -74,13 +80,13 @@ plt.show()
 # Basic price distribution
 plt.figure(figsize=(12, 6))
 plt.subplot(1, 2, 1)
-sns.boxplot(x='is_licensed', y='Price', data=df_clean)
+sns.boxplot(x='Is_licensed', y='Price', data=df)
 plt.xlabel('Licensed (1) vs Unlicensed (0)')
 plt.ylabel('Price ($)')
 plt.title('Price Distribution by License Status')
 
 plt.subplot(1, 2, 2)
-sns.scatterplot(data=df_clean, x='Pieces', y='Price', hue='is_licensed')
+sns.scatterplot(data=df, x='Pieces', y='Price', hue='Is_licensed')
 plt.xlabel('Number of Pieces')
 plt.ylabel('Price ($)')
 plt.title('Price vs Pieces by License Status')
@@ -88,16 +94,16 @@ plt.tight_layout()
 plt.show()
 
 # Basic OLS model with detailed summary
-X = df_clean['is_licensed']
-y = df_clean['Price']
+X = df['Is_licensed']
+y = df['Price']
 X = sm.add_constant(X)
 model_basic_detailed = sm.OLS(y, X).fit()
 print("\nDetailed Basic Model Summary:")
 print(model_basic_detailed.summary())
 
 # Enhanced model
-model_enhanced = smf.ols('Price ~ is_licensed + Pieces + Year + Ages + Minifigures',
-                        data=df_clean).fit()
+model_enhanced = smf.ols('Price ~ Is_licensed + Pieces + Pages',
+                         data=df).fit()
 print("\nEnhanced Model Summary:")
 print(model_enhanced.summary())
 
@@ -122,7 +128,7 @@ plt.tight_layout()
 plt.show()
 
 # Summary statistics by license status
-summary_stats = df_clean.groupby('is_licensed').agg({
+summary_stats = df.groupby('Is_licensed').agg({
     'Price': ['count', 'mean', 'std', 'min', 'max'],
     'Pieces': 'mean',
     'Minifigures': 'mean'
@@ -132,10 +138,10 @@ print("\nSummary Statistics by License Status:")
 print(summary_stats)
 
 # Calculate price per piece
-df_clean['price_per_piece'] = df_clean['Price'] / df_clean['Pieces']
+df['price_per_piece'] = df['Price'] / df['Pieces']
 
 plt.figure(figsize=(10, 6))
-sns.boxplot(x='is_licensed', y='price_per_piece', data=df_clean)
+sns.boxplot(x='Is_licensed', y='price_per_piece', data=df)
 plt.xlabel('Licensed (1) vs Unlicensed (0)')
 plt.ylabel('Price per Piece ($)')
 plt.title('Price per Piece Distribution by License Status')
