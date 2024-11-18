@@ -1,215 +1,315 @@
-# Relevante pakker
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-
-from scipy import stats
 import statsmodels.formula.api as smf
 import statsmodels.api as sm
-# Rense dataene
-df = pd.read_csv("prosjekt/Data/lego.population.csv",
-                 sep=",", encoding="latin1")
 
-# fjerner forklaringsvariabler vi ikke trenger
-df2 = df[['Set_Name', 'Theme', 'Pieces', 'Price', 'Pages',  'Unique_Pieces']]
+# Set the style for all plots
+sns.set_palette("husl")
 
-# fjerner observasjoner med manglende datapunkter
-df2 = df2.dropna()
+# Read data
+df = pd.read_csv("Data/lego.population.csv", sep=",", encoding="windows-1252")
 
-# gjør themes om til string og fjern alle tegn vi ikke vil ha med
-df2['Theme'] = df2['Theme'].astype(str)
-df2['Theme'] = df2['Theme'].str.replace(r'[^a-zA-Z0-9\s-]', '', regex=True)
+# Print all distinct themes
+print("\nDistinct Themes: ", df['Theme'].unique())
 
-# fjerner dollartegn og trademark-tegn fra datasettet
-df2['Price'] = df2['Price'].str.replace('\\$', '', regex=True)
+# Clean and prepare data
 
-# og gjør så prisen om til float
-df2['Price'] = df2['Price'].astype(float)
 
-# Mer eller mindre relevante kodesnutter
-print(df2.mean(numeric_only=True))
-print(df2['Theme'].value_counts())
-plt.hist(df2['Price'], bins=20, color='skyblue', edgecolor='black')
-plt.xlabel('Pris i dollar [$]')
-plt.ylabel('')
-plt.gca().set_aspect(1)
-plt.show()
-plt.scatter(df2['Pieces'], df2['Price'])
-plt.xlabel('Antall brikker')
-plt.ylabel('Pris i dollar [$]')
-plt.gca().set_aspect(5)
-plt.show()
-# hva er det dyreste settet i datasettet mon tro?
-print(df2.loc[df2['Price'].idxmax()])
-# og hvilket har flest brikker?
-print(df2.loc[df2['Pieces'].idxmax()])
-# hvilke tema har de billigste settene?
-df2.groupby('Theme')['Price'].mean().sort_values(ascending=True)[:3]
-# hvilke tema har flest brikker?
-df2.groupby('Theme')['Pieces'].mean().sort_values(ascending=False)[:3]
-sns.pairplot(df2, vars=['Price', 'Pieces', 'Pages', 'Unique_Pieces'],
-             hue='Theme',
-             diag_kind='kde',
-             plot_kws=dict(alpha=0.4))
-plt.show()
-# enkel lineær regresjon
-formel = 'Price ~ Pieces'
+def clean_data(df):
+    df = df[["Theme", "Price", "Pieces", "Pages"]]
+    df = df.dropna()
 
-modell = smf.ols(formel, data=df2)
-resultat = modell.fit()
+    # Clean theme names
+    df['Theme'] = df['Theme'].astype(str)
+    df['Theme'] = df['Theme'].str.replace(r'[^a-zA-Z0-9\s-]', '', regex=True)
 
-resultat.summary()
-slope = resultat.params['Pieces']
-intercept = resultat.params['Intercept']
+    # Clean price data
+    df['Price'] = df['Price'].str.replace(r'[$]', '', regex=True)
+    df['Price'] = df['Price'].astype(float)
 
-regression_x = np.array(df2['Pieces'])
+    # Updated licensed themes list
+    licensed_themes = [
+        "Architecture",
+        "Batman",
+        "BrickHeadz",
+        "DC",
+        "Disney",
+        "Harry Potter",
+        "Jurassic World",
+        "LEGO Frozen 2",
+        "LEGO Super Mario",
+        "Marvel",
+        "Minecraft",
+        "Minions",
+        "Overwatch",
+        "Powerpuff Girls",
+        "Speed Champions",
+        "Spider-Man",
+        "Star Wars",
+        "Stranger Things",
+        "Trolls World Tour",
+        "Unikitty"
+    ]
 
-regression_y = slope * regression_x + intercept
+    # Create licensed flag
+    df['Is_licensed'] = df['Theme'].apply(lambda x: 1 if any(
+        theme.lower() in x.lower() for theme in licensed_themes) else 0)
 
-plt.scatter(df2['Pieces'], df2['Price'], label='Data Points')
-plt.plot(regression_x, regression_y, color='red', label='Regression Line')
-plt.xlabel('Antall brikker')
-plt.ylabel('Pris [$]')
-plt.title('Kryssplott med regresjonslinje (enkel LR)')
-plt.legend()
-plt.grid()
-plt.show()
-figure, axis = plt.subplots(1, 2, figsize=(15, 5))
-sns.scatterplot(x=resultat.fittedvalues, y=resultat.resid, ax=axis[0])
-axis[0].set_ylabel("Residual")
-axis[0].set_xlabel("Predikert verdi")
+    df = df[["Price", "Is_licensed", "Pieces", "Pages"]]
 
-sm.qqplot(resultat.resid, line='45', fit=True, ax=axis[1])
-axis[1].set_ylabel("Kvantiler i residualene")
-axis[1].set_xlabel("Kvantiler i normalfordelingen")
-plt.show()
-mythemes = ['Star Wars', 'NINJAGO', 'Harry Potter']
-subset_df = df2[df2['Theme'].isin(mythemes)]
-sns.pairplot(subset_df, vars=['Price', 'Pieces', 'Pages',  'Unique_Pieces'],
-             hue='Theme',
-             diag_kind='kde',
-             plot_kws=dict(alpha=0.4))
-plt.show()
-# enkel lineær regresjon, tar ikke hensyn til tema
-res_sub = smf.ols('Price ~ Pieces', data=subset_df).fit()
-# enkel LR for hvert tema hver for seg
-resultater = []
-for i, theme in enumerate(mythemes):
-    modell3 = smf.ols('Price ~ Pieces',
-                      data=subset_df[subset_df['Theme'].isin([theme])])
-    resultater.append(modell3.fit())
-# plott av dataene og regresjonslinjene
-for i, theme in enumerate(mythemes):
-    slope = resultater[i].params['Pieces']
-    intercept = resultater[i].params['Intercept']
+    return df
 
-    regression_x = np.array(
-        subset_df[subset_df['Theme'].isin([theme])]['Pieces'])
-    regression_y = slope * regression_x + intercept
 
-    # Plot scatter plot and regression line
-    plt.scatter(subset_df[subset_df['Theme'].isin([theme])]['Pieces'], subset_df[subset_df['Theme'].isin(
-        [theme])]['Price'], color=plt.get_cmap('tab10')(i))
-    plt.plot(regression_x, regression_y,
-             color=plt.get_cmap('tab10')(i), label=theme)
+# Clean the data
+df = clean_data(df)
 
-plt.xlabel('Antall brikker')
-plt.ylabel('Pris')
-plt.title('Kryssplott med regresjonslinjer')
-plt.legend()
-plt.grid()
-plt.show()
-##
-# multippel lineær regresjon
-modell3_mlr = smf.ols('Price ~ Pieces + Theme', data=subset_df)
-modell3_mlr.fit().summary()
-# multippel lineær regresjon med en annen referansekategori
-modell3_mlr_alt = smf.ols(
-    'Price ~ Pieces + C(Theme, Treatment("Star Wars"))', data=subset_df)
-modell3_mlr_alt.fit().summary()
-# plott
-intercept = [modell3_mlr.fit().params['Theme[T.Star Wars]'], modell3_mlr.fit(
-).params['Theme[T.NINJAGO]'], 0] + modell3_mlr.fit().params['Intercept']
-slope = modell3_mlr.fit().params['Pieces']
 
-for i, theme in enumerate(mythemes):
+def plot_data():
+    # Histogram prices
+    plt.figure(figsize=(10, 6))
+    sns.histplot(x=df['Price'], bins=30, kde=False)
+    plt.xlabel('Pris')
+    plt.ylabel('Frekvens')
+    plt.title('Histogram av pris')
+    plt.show()
 
-    regression_x = np.array(
-        subset_df[subset_df['Theme'].isin([theme])]['Pieces'])
-    regression_y = slope * regression_x + intercept[i]
+    # Boxplot is_licensed with labels
+    plt.figure(figsize=(10, 6))
+    licensed_label = df['Is_licensed'].map({1: 'Licensed', 0: 'Non-Licensed'})
+    sns.boxplot(x=licensed_label, y="Price", data=df)
+    plt.xlabel("Lisensiert")
+    plt.ylabel("Pris")
+    plt.title("Boksplott: Pris vs. Lisensiert")
+    plt.show()
 
-    # Plot scatter plot and regression line
-    plt.scatter(subset_df[subset_df['Theme'].isin([theme])]['Pieces'], subset_df[subset_df['Theme'].isin(
-        [theme])]['Price'], color=plt.get_cmap('tab10')(i))
-    plt.plot(regression_x, regression_y,
-             color=plt.get_cmap('tab10')(i), label=theme)
+    # Scatterplot for Pieces
+    plt.figure(figsize=(10, 6))
 
-# uten tema som forklaringsvariabel:
-regression_x = np.array(subset_df['Pieces'])
-regression_y = res_sub.params['Pieces'] * \
-    regression_x + res_sub.params['Intercept']
-plt.plot(regression_x, regression_y, color='black', label='No theme')
+    sns.scatterplot(x="Pieces", y="Price", hue="Is_licensed",
+                    data=df, alpha=0.7)
+    plt.xlabel("Brikker")
+    plt.ylabel("Pris")
+    plt.title("Kryssplott: Pris vs. Brikker")
+    plt.legend(title="Lisensiert = 1")
 
-plt.xlabel('Antall brikker')
-plt.ylabel('Pris')
-plt.title('Kryssplott med regresjonslinjer')
-plt.legend()
-plt.grid()
-plt.show()
-# med interaksjonsledd mellom antall brikker og tema
-modell3_mlri = smf.ols('Price ~ Pieces*Theme', data=subset_df)
-modell3_mlri.fit().summary()
-# plott
-intercept = [modell3_mlri.fit().params['Theme[T.Star Wars]'], modell3_mlri.fit(
-).params['Theme[T.NINJAGO]'], 0] + modell3_mlri.fit().params['Intercept']
-slope = [modell3_mlri.fit().params['Pieces:Theme[T.Star Wars]'], modell3_mlri.fit(
-).params['Pieces:Theme[T.NINJAGO]'], 0] + modell3_mlri.fit().params['Pieces']
+    plt.show()
 
-for i, theme in enumerate(mythemes):
 
-    regression_x = np.array(
-        subset_df[subset_df['Theme'].isin([theme])]['Pieces'])
-    regression_y = slope[i] * regression_x + intercept[i]
+plot_data()
 
-    # Plot scatter plot and regression line
-    plt.scatter(subset_df[subset_df['Theme'].isin([theme])]['Pieces'], subset_df[subset_df['Theme'].isin(
-        [theme])]['Price'], color=plt.get_cmap('tab10')(i))
-    plt.plot(regression_x, regression_y,
-             color=plt.get_cmap('tab10')(i), label=theme)
 
-# uten tema som forklaringsvariabel:
-regression_x = np.array(subset_df['Pieces'])
-regression_y = res_sub.params['Pieces'] * \
-    regression_x + res_sub.params['Intercept']
-plt.plot(regression_x, regression_y, color='black',
-         label='Theme unaccounted for')
+def plot_diagnostics(model, title):
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
 
-plt.xlabel('Antall brikker')
-plt.ylabel('Pris [$]')
-plt.title('Kryssplott med regresjonslinjer')
-plt.legend()
-plt.grid()
-plt.show()
-# Kode for å lagre plot som (.png)
-# fjern 'plt.show()' og erstatt med:
-# plt.savefig('my_plot.png')
-# Steg 5: Evaluere om modellen passer til dataene
-# Plotte predikert verdi mot residual
-figure, axis = plt.subplots(1, 2, figsize=(15, 5))
-sns.scatterplot(x=modell3_mlri.fit().fittedvalues,
-                y=modell3_mlri.fit().resid, ax=axis[0])
-axis[0].set_ylabel("Residual")
-axis[0].set_xlabel("Predikert verdi")
+    # Residual plot
+    ax1.scatter(model.fittedvalues, model.resid)
+    ax1.set_xlabel('Predikert verdi')
+    ax1.set_ylabel('Residual')
+    ax1.set_title('Residualer Plot')
 
-# Lage kvantil-kvantil-plott for residualene
-sm.qqplot(modell3_mlri.fit().resid, line='45', fit=True, ax=axis[1])
-axis[1].set_ylabel("Kvantiler i residualene")
-axis[1].set_xlabel("Kvantiler i normalfordelingen")
-plt.show()
-# Gruppere temaer i nye grupper:
-# (Harry Potter, NINJAGO og Star Wars havner i én gruppe, City og Friends i en annen, og alle andre i en tredje)
-df2['cat'] = np.where(df2['Theme'].isin(['Harry Potter', 'NINJAGO', 'Star Wars']), 'Cat1',
-                      np.where(df2['Theme'].isin(['City', 'Friends']), 'Cat2', 'Cat3'))
-df2.groupby(['cat']).size().reset_index().rename(columns={0: 'Count'})
-df2.groupby(['cat', 'Theme']).size().reset_index().rename(columns={0: 'Count'})
+    # Q-Q plot
+    sm.qqplot(model.resid, line='45', fit=True, ax=ax2)
+    ax2.set_title('QQ Plot')
+    ax2.set_xlabel('Kvantiler i normalfordelingen')
+    ax2.set_ylabel('Kvantiler i residualene')
+
+    fig.suptitle(title)
+    plt.show()
+
+
+def plot_modelA():
+    formula = "Price ~ Pieces"
+    model = smf.ols(formula=formula, data=df).fit()
+    summary = model.summary()
+    print("Model A Summary:")
+    print(summary)
+
+    X = df['Pieces']
+    y = df['Price']
+
+    plt.figure(figsize=(8, 6))
+    # Scatter plot for actual data
+    sns.scatterplot(x=X, y=y, alpha=0.6, label='Data')
+    plt.plot(X, model.fittedvalues, color='red',
+             label='Regresjonslinje')  # Regression line
+    plt.title('Model A: Pris vs. brikker')
+    plt.xlabel('Brikker')
+    plt.ylabel('Pris')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    plot_diagnostics(model, "Model A Diagnostikk")
+
+
+plot_modelA()
+
+
+def plot_modelB():
+    formula = "Price ~ Pieces + Pages"
+    model = smf.ols(formula=formula, data=df).fit()
+    summary = model.summary()
+    print("Model B Summary:")
+    print(summary)
+
+    X = df[['Pieces', 'Pages']]
+    y = df['Price']
+
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+
+    # Scatter plot for actual data
+    ax.scatter(X['Pieces'], X['Pages'], y, alpha=0.6, label='Data')
+
+    # Create a meshgrid for the plane
+    xx, yy = np.meshgrid(np.linspace(X['Pieces'].min(), X['Pieces'].max(), 100),
+                         np.linspace(X['Pages'].min(), X['Pages'].max(), 100))
+    zz = model.params[0] + model.params[1] * xx + model.params[2] * yy
+
+    # Plot the plane
+    ax.plot_surface(xx, yy, zz, color='red', alpha=0.3,  # type: ignore // python er dum
+                    rstride=100, cstride=100)
+
+    ax.set_title('Model B: Pris vs. Brikker og Sider')
+    ax.set_xlabel('Brikker')
+    ax.set_ylabel('Sider')
+    ax.set_zlabel('Pris')  # type: ignore // python er dum
+    ax.legend()
+    plt.show()
+
+    plot_diagnostics(model, "Model B Diagnostikk")
+
+
+plot_modelB()
+
+
+def plot_modelC1():
+    formula = "Price ~ Pieces"
+
+    # Separate the data by Is_licensed
+    licensed_df = df[df['Is_licensed'] == 1]
+    non_licensed_df = df[df['Is_licensed'] == 0]
+
+    # Fit separate models for each group
+    model_licensed = smf.ols(formula=formula, data=licensed_df).fit()
+    model_non_licensed = smf.ols(formula=formula, data=non_licensed_df).fit()
+
+    # Plot data for each group side by side
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+
+    sns.scatterplot(data=licensed_df, x='Pieces', y='Price',
+                    color='blue', label='Lisensiert data', ax=ax1)
+    ax1.plot(licensed_df['Pieces'], model_licensed.fittedvalues,
+             color='blue', label='Lisensiert regresjonslinje')
+    ax1.set_title('Lisensiert data: Pris vs. Brikker')
+    ax1.set_xlabel('Brikker')
+    ax1.set_ylabel('Pris')
+    ax1.legend()
+    ax1.grid(True)
+
+    sns.scatterplot(data=non_licensed_df, x='Pieces', y='Price',
+                    color='orange', label='Ikke-lisensiert data', ax=ax2)
+    ax2.plot(non_licensed_df['Pieces'], model_non_licensed.fittedvalues,
+             color='orange', label='Ikke-liseniert regresjonslinje')
+    ax2.set_title('Ikke-lisensiert data: Pris vs. Brikker')
+    ax2.set_xlabel('Brikker')
+    ax2.set_ylabel('Pris')
+    ax2.legend()
+    ax2.grid(True)
+
+    plt.suptitle('Model C1: Pris vs. Brikker (Lisensiert vs. Ikke-lisensiert)')
+    plt.show()
+
+    # Plot diagnostics for both models
+    plot_diagnostics(model_licensed, "Model C1 Lisensiert diagnostikk")
+    plot_diagnostics(model_non_licensed,
+                     "Model C1 Ikke-lisensiert diagnostikk")
+
+
+plot_modelC1()
+
+
+def plot_modelC2():
+    formula = "Price ~ Pieces + Is_licensed"
+    model = smf.ols(formula=formula, data=df).fit()
+
+    print("Model C2 Summary:")
+    print(model.summary())
+
+    plt.figure(figsize=(8, 6))
+
+    # Scatter plots for licensed and non-licensed data
+    sns.scatterplot(data=df[df['Is_licensed'] == 1], x='Pieces',
+                    y='Price', color='blue', label='Lisensiert data', alpha=0.6)
+    sns.scatterplot(data=df[df['Is_licensed'] == 0], x='Pieces',
+                    y='Price', color='orange', label='Ikke-lisensiert data', alpha=0.6)
+
+    # Define x values for plotting lines
+    x_vals = np.linspace(df['Pieces'].min(), df['Pieces'].max(), 100)
+
+    # Licensed regression line
+    licensed_line = model.params['Intercept'] + \
+        model.params['Pieces'] * x_vals + model.params['Is_licensed']
+    plt.plot(x_vals, licensed_line, color='blue',
+             label='Lisensiert regresjonslinje', zorder=2, linestyle='--')
+
+    # Non-licensed regression line
+    non_licensed_line = model.params['Intercept'] + \
+        model.params['Pieces'] * x_vals
+    plt.plot(x_vals, non_licensed_line, color='orange',
+             label='Ikke-lisensiert regresjonslinje', zorder=1, linestyle='-.')
+
+    plt.title('Model C2: Pris vs. Brikker + Lisensiert')
+    plt.xlabel('Brikker')
+    plt.ylabel('Pris')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    plot_diagnostics(model, "Model C2 Diagnostikk")
+
+
+plot_modelC2()
+
+
+def plot_modelC3():
+    formula = "Price ~ Pieces * Is_licensed"
+    model = smf.ols(formula=formula, data=df).fit()
+
+    print("Model C3 Summary:")
+    print(model.summary())
+
+    plt.figure(figsize=(8, 6))
+
+    # Scatter plots
+    sns.scatterplot(data=df[df['Is_licensed'] == 1], x='Pieces',
+                    y='Price', color='blue', label='Lisensiert data')
+    sns.scatterplot(data=df[df['Is_licensed'] == 0], x='Pieces',
+                    y='Price', color='orange', label='Ikke-lisensiert data')
+
+    # Regression lines (Different slopes due to interaction term)
+    x_vals = np.linspace(df['Pieces'].min(), df['Pieces'].max(), 100)
+    licensed_line = model.params['Intercept'] + model.params['Pieces'] * x_vals + \
+        model.params['Is_licensed'] + \
+        model.params['Pieces:Is_licensed'] * x_vals
+    non_licensed_line = model.params['Intercept'] + \
+        model.params['Pieces'] * x_vals
+
+    plt.plot(x_vals, licensed_line, color='blue',
+             label='Lisensiert regresjonslinje')
+    plt.plot(x_vals, non_licensed_line, color='orange',
+             label='Ikke-lisensiert regresjonslinje')
+
+    plt.title('Model C3: Pris vs. Brikker * Lisensiert')
+    plt.xlabel('Brikker')
+    plt.ylabel('Pris')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    plot_diagnostics(model, "Model C3 Diagnostikk")
+
+
+plot_modelC3()
